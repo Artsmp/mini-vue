@@ -1,4 +1,5 @@
 import { isObject } from "@vue/shared";
+import { mutableHandler, ReactiveFlags } from "./baseHandlers";
 
 /*
 1. 简单的返回一个响应式对象
@@ -9,10 +10,7 @@ import { isObject } from "@vue/shared";
   3.3 在 get 中为这个独有的键返回true
 */
 const proxyMap = new WeakMap();
-const enum ReactiveFlags {
-  /** 判断是否已经被代理过 */
-  IS_REACTIVE = "__v_isReactive",
-}
+
 export const reactive = (target: object) => {
   if (!isObject(target)) return target;
   // 3
@@ -22,18 +20,7 @@ export const reactive = (target: object) => {
   // 2
   const existingProxy = proxyMap.get(target);
   if (existingProxy) return existingProxy;
-  let proxy = new Proxy(target, {
-    get(target, key, receiver) {
-      // 3.3
-      if (key === ReactiveFlags.IS_REACTIVE) {
-        return true;
-      }
-      return Reflect.get(target, key, receiver);
-    },
-    set(target, key, newVal, receiver) {
-      return Reflect.set(target, key, newVal, receiver);
-    },
-  });
+  let proxy = new Proxy(target, mutableHandler);
   proxyMap.set(target, proxy);
   return proxy;
 };
