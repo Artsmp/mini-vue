@@ -1,4 +1,16 @@
 export let activeEffect: ReactiveEffect = undefined;
+
+/**
+ * 清空当前effect的所有依赖，并从对应的属性中的依赖set中删除自己
+ * @param effect 当前要进行重新依赖收集的effect实例
+ */
+const cleanupEffect = (effect: ReactiveEffect) => {
+  const { deps } = effect;
+  for (let i = 0; i < deps.length; i++) {
+    deps[i].delete(effect);
+  }
+  deps.length = 0;
+};
 class ReactiveEffect {
   public active = true;
   public parent = null;
@@ -11,6 +23,8 @@ class ReactiveEffect {
     try {
       this.parent = activeEffect; // 记录自己的父亲
       activeEffect = this;
+      // 重新进行依赖收集的时候，清空上一次保存的effect set
+      cleanupEffect(this);
       this.fn();
     } finally {
       activeEffect = undefined;
@@ -54,14 +68,16 @@ export const track = (target, type, key) => {
 export const trigger = (target, type, key, newVal, oldVal) => {
   const depsMap = targetMap.get(target);
   if (!depsMap) return;
-  const effects = depsMap.get(key);
-  effects &&
+  let effects = depsMap.get(key);
+  if (effects) {
+    effects = [...effects];
     effects.forEach((effect) => {
       if (effect !== activeEffect) {
         // 防止在effect回调中再次修改目标属性值，造成爆栈
         effect.run();
       }
     });
+  }
 };
 
 /* 
