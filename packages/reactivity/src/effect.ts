@@ -15,10 +15,15 @@ class ReactiveEffect {
   public active = true;
   public parent = null;
   public deps = [];
-  constructor(public fn: Function) {}
+  constructor(public fn: Function, public schedular: () => void) {}
   run() {
+    console.log("runner ...");
+
     // 不是激活的effect，则只执行不进行依赖收集
-    if (!this.active) this.fn();
+    if (!this.active) {
+      this.fn();
+      return;
+    }
     // 进行依赖收集
     try {
       this.parent = activeEffect; // 记录自己的父亲
@@ -32,11 +37,20 @@ class ReactiveEffect {
       this.parent = null;
     }
   }
+  stop() {
+    if (this.active) {
+      this.active = false;
+      cleanupEffect(this);
+    }
+  }
 }
 
-export const effect = (fn: Function) => {
-  const _effect = new ReactiveEffect(fn);
+export const effect = (fn: Function, options: { schedular: () => void }) => {
+  const _effect = new ReactiveEffect(fn, options.schedular);
   _effect.run(); // 默认先执行一次
+  const runner: any = _effect.run.bind(_effect);
+  runner.effect = _effect;
+  return runner;
 };
 
 const targetMap = new WeakMap(); // 依赖存放地：键为对象，值为Map，Map里面的键为对象的key，值为Set，Set存放的是effect实例
@@ -73,6 +87,11 @@ export const trigger = (target, type, key, newVal, oldVal) => {
     effects = [...effects];
     effects.forEach((effect) => {
       if (effect !== activeEffect) {
+        // 如果有自定义调度器，则执行自定义调度器，不进行依赖收集（走到trigger的时候已经走过set了，也就是属性值已经变了）
+        if (effect.schedular) {
+          effect.schedular();
+          return;
+        }
         // 防止在effect回调中再次修改目标属性值，造成爆栈
         effect.run();
       }
